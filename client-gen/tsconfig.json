@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": false,
+    "strictPropertyInitialization": false,
+    "strictBindCallApply": true,
+    "resolveJsonModule": true,
+    "target": "es2016",
+    "module": "commonjs",
+    "esModuleInterop": true,
+    "moduleResolution": "node",
+    "outDir": "./dist",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "downlevelIteration": true,
+    "noUnusedLocals": true,
+    "noImplicitAny": true,
+    "declaration": true,
+    "typeRoots": ["./src/types", "./node_modules/@types"],
+    "lib": ["es2018", "dom"]
+  },
+  "include": [
+    "*.ts",
+    "core/**/*.ts",
+    "models/**/*.ts",
+    "schemas/**/*.ts",
+    "services/**/*.ts"
+  ],
+  "exclude": ["dist/**", "./generateOpenAPIScheme.ts"]
+}

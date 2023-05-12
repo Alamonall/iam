@@ -1,0 +1,87 @@
+version: '2.4'
+
+services:
+  vault:
+    image: vault
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: test
+      VAULT_ADDR: http://0.0.0.0:8200
+    ports:
+      - "8200:8200"
+    cap_add:
+      - IPC_LOCK
+    healthcheck:
+      test: wget -q http://localhost:8200/v1/sys/health -O /dev/null
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  zookeeper:
+    image: wurstmeister/zookeeper:latest
+    environment:
+      ALLOW_PLAINTEXT_LISTENER: 'yes'
+      ALLOW_ANONYMOUS_LOGIN: 'yes'
+
+  kafka:
+    image: wurstmeister/kafka:latest
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_ADVERTISED_HOST_NAME: kafka
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: true
+    ports:
+      - "9092:9092"
+
+  redis:
+    image: redis:6-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:19.0.3
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: 'true'
+    ports:
+      - 8080:8080
+    # depends_on:
+    #   - postgres
+    command: start-dev
+    healthcheck:
+      test: curl -s http://localhost:8080/health/ready
+      interval: 5s
+      timeout: 2s
+      retries: 15
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.5
+    command:
+      - etcd
+      - -name=etcd0
+      - -advertise-client-urls=https://localhost:2379,https://127.0.0.1:2379,https://etcd:2379
+      - -listen-client-urls=https://0.0.0.0:2379
+      - -initial-advertise-peer-urls=http://etcd:2380
+      - -listen-peer-urls=http://0.0.0.0:2380
+      - -initial-cluster-token=etcd-cluster-1
+      - -initial-cluster=etcd0=http://etcd:2380
+      - -initial-cluster-state=new
+      - -cert-file=/etcd_certs/host.cert
+      - -key-file=/etcd_certs/host.key
+    volumes:
+      - ./test/etcd_certs/:/etcd_certs/
+    ports:
+      - 2379:2379
+    healthcheck:
+      test: etcdctl --endpoints=https://localhost:2379 --cacert=/etcd_certs/host.cert endpoint health
+      interval: 2s
+      timeout: 1s
+      retries: 3
+      start_period: 2s

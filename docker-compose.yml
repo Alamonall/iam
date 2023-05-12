@@ -1,0 +1,129 @@
+version: '2.4'
+
+services:
+  iam-service:
+    image: node:18
+    environment:
+      ENVIRONMENT: test
+      PORT: 3000
+      API_PORT: 3001
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_TOPIC_NAMESPACE: test
+      NESTJS_BULL_DEBUG: true
+      NEST_DEBUG: true
+      VAULT_TOKEN: test
+      VAULT_ENDPOINT_TO_KV: http://0.0.0.0:8200/v1/secret
+      MONITOR_SERVICE_API_URL: http://bad-url
+      REDIS_URI: redis://0.0.0.0:6379
+      ETCD_NAMESPACE: /stage/iam/realms/
+      ETCD_URI: http://0.0.0.0:2379
+      ETCD_USERNAME: ''
+      ETCD_PASSWORD: ''
+      KEYCLOAK_BASE_URL: http://0.0.0.0:8080
+      KEYCLOAK_CLIENT_ID: admin-cli
+    ports:
+      - "3000:3000"
+      - "3001:3001"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      vault:
+        condition: service_healthy
+      etcd:
+        condition: service_started
+  vault:
+    image: vault
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: test
+      VAULT_ADDR: http://0.0.0.0:8200
+    ports:
+      - "8200:8200"
+    cap_add:
+      - IPC_LOCK
+    healthcheck:
+      test: wget -q http://localhost:8200/v1/sys/health -O /dev/null
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  zookeeper:
+    image: wurstmeister/zookeeper:latest
+    environment:
+      ALLOW_PLAINTEXT_LISTENER: 'yes'
+      ALLOW_ANONYMOUS_LOGIN: 'yes'
+
+  kafka:
+    image: wurstmeister/kafka:latest
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_ADVERTISED_HOST_NAME: kafka
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+    ports:
+      - "9092:9092"
+
+  redis:
+    image: redis:6-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  postgres:
+    image: postgres
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: password
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:19.0.3
+    environment:
+      DB_VENDOR: POSTGRES
+      DB_ADDR: postgres
+      DB_DATABASE: keycloak
+      DB_USER: keycloak
+      DB_SCHEMA: public
+      DB_PASSWORD: password
+      KEYCLOAK_USER: admin
+      KEYCLOAK_PASSWORD: admin
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: 'true'
+    ports:
+      - 8080:8080
+    depends_on:
+      - postgres
+    command: start-dev
+    healthcheck:
+      test: curl -f http://localhost:8080/health/ready
+      interval: 5s
+      timeout: 2s
+      retries: 15
+
+  etcd:
+    image: docker.io/bitnami/etcd:3.5
+    environment:
+      - ALLOW_NONE_AUTHENTICATION=yes
+      - ETCD_NAME=etcd
+      - ETCD_INITIAL_ADVERTISE_PEER_URLS=http://etcd:2380
+      - ETCD_LISTEN_PEER_URLS=http://0.0.0.0:2380
+      - ETCD_LISTEN_CLIENT_URLS=http://0.0.0.0:2379,http://etcd:2379
+      - ETCD_ADVERTISE_CLIENT_URLS=http://127.0.0.1:2379,http://etcd:2379
+    ports:
+      - 2379:2379
+    healthcheck:
+      test: curl -f http://0.0.0.0:2379/health
+      interval: 10s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
